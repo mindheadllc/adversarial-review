@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { createOpenRouterClient, assertReviewersNonClaude } from "../openRouterClient";
+import { createOpenRouterClient, assertReviewersExcludeSynthesizer } from "../openRouterClient";
 import type { ModelSpec } from "../adversarialReviewCore";
 
 // A long, valid critique (clears the work-product length floor + no refusal opener).
@@ -142,10 +142,18 @@ describe("fanOutPanel — barrier", () => {
     expect(results.every((r) => r.trail[0].outcome === "zdr-blocked")).toBe(true);
   });
 
-  test("rejects a Claude reviewer lab", async () => {
+  test("rejects a reviewer whose lab is the synthesizer's lab", async () => {
     const { fetchImpl } = makeMock({});
-    const client = createOpenRouterClient(baseOpts(fetchImpl));
-    await expect(client.fanOutPanel([{ family: "anthropic", chain: [spec("anthropic/claude-opus-4.8", "anthropic")] }], "P")).rejects.toThrow(/NON-Claude/i);
+    // synthesizer is anthropic, so an anthropic reviewer is refused (can't be critic AND synthesizer)
+    const client = createOpenRouterClient(baseOpts(fetchImpl, { synthesizerLab: "anthropic" }));
+    await expect(client.fanOutPanel([{ family: "anthropic", chain: [spec("anthropic/claude-opus-4.8", "anthropic")] }], "P")).rejects.toThrow(/synthesizer's lab/i);
+  });
+
+  test("ALLOWS a Claude reviewer when Claude is NOT the synthesizer (e.g. an OpenAI/Codex daily driver)", async () => {
+    const { fetchImpl } = makeMock({});
+    const client = createOpenRouterClient(baseOpts(fetchImpl, { synthesizerLab: "openai" }));
+    const results = await client.fanOutPanel([{ family: "anthropic", chain: [spec("anthropic/claude-opus-4.8", "anthropic")] }], "P");
+    expect(results[0].status).toBe("ok"); // Opus reviews fine; only the synthesizer's lab (openai) is excluded
   });
 });
 
@@ -193,9 +201,17 @@ describe("fetchCatalog", () => {
   });
 });
 
-describe("assertReviewersNonClaude", () => {
-  test("throws on a claude slug, passes a non-claude lab", () => {
-    expect(() => assertReviewersNonClaude([{ slug: "anthropic/claude-opus-4.8", family: "anthropic" }])).toThrow();
-    expect(() => assertReviewersNonClaude([{ slug: "openai/gpt-5.5", family: "openai" }])).not.toThrow();
+describe("assertReviewersExcludeSynthesizer", () => {
+  test("throws when a reviewer's lab equals the synthesizer's lab", () => {
+    expect(() => assertReviewersExcludeSynthesizer([{ slug: "anthropic/claude-opus-4.8", family: "anthropic" }], "anthropic")).toThrow();
+  });
+  test("passes when reviewers are a different lab than the synthesizer", () => {
+    expect(() => assertReviewersExcludeSynthesizer([{ slug: "openai/gpt-5.5", family: "openai" }], "anthropic")).not.toThrow();
+  });
+  test("a Claude reviewer is fine when the synthesizer is a different lab (the Codex-user case)", () => {
+    expect(() => assertReviewersExcludeSynthesizer([{ slug: "anthropic/claude-opus-4.8", family: "anthropic" }], "openai")).not.toThrow();
+  });
+  test("a falsy synthesizer lab disables the check", () => {
+    expect(() => assertReviewersExcludeSynthesizer([{ slug: "anthropic/claude-opus-4.8", family: "anthropic" }], "")).not.toThrow();
   });
 });

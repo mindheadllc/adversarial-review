@@ -2,7 +2,7 @@
 name: adversarial-review
 description: >
   Pressure-tests a claim, document, plan, or framework by fanning it out to several
-  INDEPENDENT non-Claude frontier models (adversarial mode), or models how a named
+  INDEPENDENT frontier models from different labs (adversarial mode), or models how a named
   opponent would attack a position (steel-man mode). Both consume a structured
   "thesis packet" whose required rails — artifact, precise question, frame, scoped
   evidence, named gaps, review axes, and an explicit sensitivity declaration — are
@@ -32,9 +32,10 @@ format, and how to drive it from an agent. This file is the quick operational ca
 
 Precision of the *input* is the whole game: a vague request produces vague critique. So
 the rails go on the input, enforced mechanically by a precision gate that refuses to fan
-out on empty/hedged values. Reviewers are deliberately NON-Claude (correlated training
-data → correlated blind spots); a Claude model is used ONLY to synthesize their critiques,
-never to critique. The synthesis ORGANIZES the attacks — you are the final judge.
+out on empty/hedged values. Reviewers are deliberately a different lineage than the
+synthesizer (the model organizing the critiques can't also be a critic) — by default a
+non-Claude panel with a Claude synthesizer, but the synthesizer/panel split is configurable.
+The synthesis ORGANIZES the attacks — you are the final judge.
 
 ## Commands
 

@@ -36,7 +36,6 @@ import {
   evaluatePanel,
   resolveCredential,
   isVacuous,
-  isClaudeModel,
   type ThesisPacket,
   type ModelSpec,
   type ResolvedSources,
@@ -300,7 +299,7 @@ async function loadScaffold(mode: ThesisPacket["mode"]): Promise<string> {
 // ---- chain resolution ----------------------------------------------------------
 function buildReviewerSlots(catalog: any[], cfg: LoadedConfig): { family: string; chain: ModelSpec[] }[] {
   return cfg.reviewerLabs
-    .filter((lab) => !isClaudeModel(lab, lab)) // belt: never a Claude reviewer lab
+    .filter((lab) => lab !== cfg.synthesizerLab) // de-correlate: the synthesizer's lab never also reviews
     .map((lab) => ({
       family: lab,
       chain: buildFamilyChain(catalog, lab, { depth: cfg.chainDepth, smartExclude: cfg.smartExclude, reasoning: labReasoning(cfg, lab), includePattern: cfg.labPatterns[lab] }),
@@ -377,6 +376,7 @@ function makeClient(cfg: LoadedConfig, apiKey: string, zdr: boolean) {
     retry: cfg.defaults.retry,
     timeoutMs: cfg.defaults.request_timeout_ms,
     slotDeadlineMs: cfg.defaults.slot_deadline_ms,
+    synthesizerLab: cfg.synthesizerLab,
     log: (line) => process.stderr.write(`  ${line}\n`),
   });
 }

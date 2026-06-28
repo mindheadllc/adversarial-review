@@ -71,9 +71,11 @@ and enforces them mechanically:
    non-vacuous content. Empty, `TBD`, or hedged values are rejected with a per-field list of
    what's missing — *before any model is called and any money is spent.*
 2. **Diversity defeats correlated blind spots.** The reviewers are several frontier models
-   from *different* labs (OpenAI, Google, xAI, DeepSeek, etc.), run at high reasoning effort.
-   They are deliberately **not** Claude — a model from the same lineage as the synthesizer
-   would share its blind spots.
+   from *different* labs (OpenAI, Google, xAI, DeepSeek, etc.), run at high reasoning effort —
+   and deliberately a *different lineage than the synthesizer*, so the model organizing the
+   critiques isn't also one of the critics. By default that's a non-Claude panel with a Claude
+   synthesizer, but it's configurable: whichever lab you pick to synthesize is auto-excluded
+   from the panel (see [Model configuration](#model-configuration)).
 3. **The synthesis organizes; it does not decide.** One Claude model reads all the
    independent critiques and produces a single structured map. It is told, explicitly, that
    the human is the final judge. It never critiques; it only reconciles.
@@ -297,7 +299,13 @@ bun adversarial_review.ts run \
 flagship reasoner from the live OpenRouter catalog by release date, so the config never goes
 stale as new models ship. Key points:
 
-- Reviewer labs are non-Claude (enforced in code). The synthesizer lab is Claude.
+- The **synthesizer's lab is auto-excluded from the reviewer panel** — the model that
+  organizes the critiques can't also be one of the critics. By default the synthesizer is
+  Claude and the panel is the six non-Claude labs, but it's your choice: pick any
+  `synthesizer_lab`, and list any labs in `reviewer_labs`. **Running Codex/GPT as your daily
+  driver?** Add `anthropic` to `reviewer_labs` to put Opus on the panel, and set
+  `synthesizer_lab` to a different lab — so the models attacking your work don't share the
+  blind spots of the model you drafted it with.
 - Failover walks **down the same lab's chain** (a newer model → an older one in the same
   family), never across labs — diversity is preserved over chasing the absolute frontier.
 - A response is validated as a real critique, not just an HTTP 200: a refusal or restriction

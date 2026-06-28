@@ -774,9 +774,10 @@ export interface ReviewerResult {
 const CLAUDE_FAMILIES = new Set(["anthropic", "claude"]);
 
 /**
- * True if a slug/family is a Claude/Anthropic model. Used to enforce the hard rule
- * that REVIEWERS are non-Claude (correlated training data => correlated blind spots)
- * and that the SYNTHESIZER is Claude.
+ * True if a slug/family is a Claude/Anthropic model. A small utility — the default
+ * config uses Claude as the synthesizer, but the synthesizer/reviewer split is fully
+ * configurable; the only rule the tool enforces is that a reviewer lab can't equal the
+ * synthesizer's lab (see assertReviewersExcludeSynthesizer in openRouterClient.ts).
  */
 export function isClaudeModel(slug: string, family?: string): boolean {
   if (family && CLAUDE_FAMILIES.has(family.toLowerCase())) return true;

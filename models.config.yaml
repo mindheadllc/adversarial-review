@@ -6,8 +6,9 @@
 # because there are no slugs — only labs and a selection policy.
 #
 # HARD RULES (enforced in code, independent of this file):
-#   - Reviewer labs are NON-Claude (correlated training data => correlated blind
-#     spots). A Claude reviewer lab is rejected at config load.
+#   - A reviewer lab may not equal the synthesizer's lab — the model that organizes
+#     the critiques can't also be a critic (that correlates critique and synthesis).
+#     Any other lab may review, INCLUDING Claude; the synthesizer's lab is auto-excluded.
 #   - Failover walks DOWN the SAME lab's chain (diversity > frontier), never across.
 #   - A response is validated as a real work product, not just an HTTP 200 — a
 #     refusal or a plaintext "restricted due to..." blob triggers in-lab failover.
@@ -52,7 +53,12 @@ credential:
   #     var: OPENROUTER_API_KEY
 
 # Reviewer labs — the diversity panel. Each resolves live to its current smart
-# reasoner chain. NON-Claude only. Order is a hint, not a ranking.
+# reasoner chain. Order is a hint, not a ranking. The one constraint: a reviewer lab
+# can't be the synthesizer's lab (set below) — it's auto-excluded if you list it.
+# TIP: you get the most signal when the panel does NOT include your own daily-driver /
+# drafting model's lineage (it shares blind spots with how the work was produced). So
+# if you work in GPT/Codex all day, add `anthropic` here so Opus is on the panel, and
+# set `synthesizer_lab` below to a non-anthropic lab.
 # Chosen so the panel clears 3+ reviewers in BOTH modes: under ZDR, some labs may
 # drop out (no zero-retention endpoint), and the rest still clear the target.
 reviewer_labs:
@@ -76,8 +82,11 @@ lab_patterns:
   moonshotai: "kimi-k[0-9]"
   anthropic: "claude-(fable|mythos|opus|sonnet)-?[0-9]"
 
-# Synthesizer lab — Claude. Resolves to the current Claude flagship with in-lab
-# fallback (e.g. a faster flagship -> a heavier one when the faster is unavailable).
+# Synthesizer lab — the model that ORGANIZES the critiques (it never critiques).
+# Defaults to Claude (anthropic); set it to any lab. Whatever you pick is auto-excluded
+# from the reviewer panel above, so critique and synthesis stay de-correlated. Resolves
+# to that lab's current flagship with in-lab fallback (e.g. a faster flagship -> a
+# heavier one when the faster is unavailable).
 synthesizer_lab: anthropic
 
 # Per-lab reasoning effort. Default applies to any lab without an override.

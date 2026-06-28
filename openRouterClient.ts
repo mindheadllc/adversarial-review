@@ -23,7 +23,6 @@
  */
 
 import {
-  isClaudeModel,
   isValidWorkProduct,
   type ModelSpec,
 } from "./adversarialReviewCore";
@@ -40,6 +39,9 @@ export interface OpenRouterClientOpts {
   /** ZDR is per-run; when true the provider preference rides on every request. */
   zdrEnabled: boolean;
   providerPreference: Record<string, any>;
+  /** The synthesizer's lab. A reviewer whose lab equals it is refused — the model
+   *  that organizes the critiques must not also be a critic (correlated blind spots). */
+  synthesizerLab?: string;
   retry?: RetryConfig;
   timeoutMs?: number;
   slotDeadlineMs?: number;
@@ -55,14 +57,22 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Throws if any reviewer lab/slug is a Claude model (reviewers must be non-Claude). */
-export function assertReviewersNonClaude(specs: { slug: string; family: string }[]): void {
-  const offenders = specs.filter((r) => isClaudeModel(r.slug, r.family));
+/** Throws if any reviewer lab equals the synthesizer's lab. The model that organizes
+ *  the critiques must not also be one of the critics, or critique and synthesis share
+ *  blind spots. Any lab can review — including Claude — as long as it isn't the
+ *  synthesizer's lab. A falsy synthesizerLab disables the check. */
+export function assertReviewersExcludeSynthesizer(
+  specs: { slug: string; family: string }[],
+  synthesizerLab: string,
+): void {
+  if (!synthesizerLab) return;
+  const offenders = specs.filter((r) => r.family === synthesizerLab);
   if (offenders.length > 0) {
     throw new Error(
-      `Reviewers must be NON-Claude (correlated blind spots). Claude reviewer(s): ${offenders
-        .map((o) => o.slug)
-        .join(", ")}. Claude belongs in the synthesizer slot.`,
+      `A reviewer lab must not be the synthesizer's lab "${synthesizerLab}" — the synthesizer ` +
+        `organizes the critiques, so it can't also be a critic (that would correlate critique and ` +
+        `synthesis). Offending reviewer(s): ${offenders.map((o) => o.slug).join(", ")}. ` +
+        `Set synthesizer_lab to a different lab, or remove "${synthesizerLab}" from reviewer_labs.`,
     );
   }
 }
@@ -227,12 +237,15 @@ export function createOpenRouterClient(opts: OpenRouterClientOpts) {
   /** Fan out the reviewer prompt across all lab slots. BARRIER: awaits every slot
    *  (success or chain-exhausted) before returning, so synthesis never runs partial. */
   async function fanOutPanel(slots: { family: string; chain: ModelSpec[] }[], prompt: string): Promise<SlotResult[]> {
-    assertReviewersNonClaude(slots.flatMap((s) => [{ slug: s.family, family: s.family }, ...s.chain.map((c) => ({ slug: c.slug, family: c.family }))]));
+    assertReviewersExcludeSynthesizer(
+      slots.flatMap((s) => [{ slug: s.family, family: s.family }, ...s.chain.map((c) => ({ slug: c.slug, family: c.family }))]),
+      opts.synthesizerLab ?? "",
+    );
     return Promise.all(slots.map((s) => runSlot(s.chain, prompt, s.family)));
   }
 
-  /** Run the synthesizer over its (Claude) chain — Fable 5 → Opus 4.8 fallback.
-   *  Throws if every model in the Claude chain fails. */
+  /** Run the synthesizer over the configured synthesizer lab's chain (Claude by
+   *  default — e.g. Fable 5 → Opus 4.8). Throws if every model in the chain fails. */
   async function runSynthesizer(chain: ModelSpec[], prompt: string): Promise<{ slug: string; text: string; trail: { slug: string; outcome: string }[] }> {
     const slot = await runSlot(chain, prompt, "synthesizer");
     if (slot.status !== "ok") {
