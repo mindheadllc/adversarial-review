@@ -1,0 +1,64 @@
+# Saved (locked, recurring) thesis packet template — a recurring article-claim review.
+# Every rail is fixed EXCEPT the artifact, which a higher-order wrapper overrides
+# per run (feed one new article each time). Run non-interactively with:
+#   bun adversarial_review.ts run --template packet-templates/saved-recurring.yaml \
+#       --artifact <path-to-new-article>
+# The --artifact flag replaces the artifact slot below; nothing else changes.
+
+schema_version: 2
+mode: adversarial
+
+# REQUIRED. Declared explicitly so this template runs non-interactively. Defaulted
+# to `sensitive` on purpose: framework and strategy claims count as sensitive
+# material, and a recurring autonomous run is exactly where a silent leak to a
+# data-retaining endpoint would go unnoticed — so the safe default forces ZDR on.
+# Flip to not-sensitive ONLY for an already-published article where you want the
+# full frontier panel (incl. non-ZDR labs).
+sensitivity: sensitive
+
+# Slot — overridden per run by --artifact. Left empty on purpose; supplying just
+# the artifact at run time is what makes this a one-input recurring review.
+artifact:
+  path: ""
+
+question: >
+  Does this article make a genuine, non-obvious structural-identity claim that
+  holds up, or does it dress an obvious or untransferable idea in coined vocabulary?
+
+frame: >
+  Review the article as a structural / intellectual-framework claim. In scope:
+  whether the claimed cross-substrate structure is real, non-obvious, runs in
+  reverse, and yields a prescription in both substrates. Out of scope: prose
+  quality, tone, and whether the topic is interesting — judge the CLAIM, not the
+  writing.
+
+# Pulled from axis-sets/structural-claim.yaml; adjust here if the council evolves.
+axes:
+  - name: non-obviousness
+    probe: Once stated plainly, is the claim a genuine insight, or already obvious to a domain expert?
+  - name: substrate-transfer reality
+    probe: Does the structure actually hold in both substrates, or only by loose analogy?
+  - name: reverse-direction test
+    probe: Does the mapping run in reverse and produce something true rather than nonsense?
+  - name: prescription in both substrates
+    probe: Does it yield a concrete, testable prescription in each substrate, or only a description?
+  - name: vocabulary-strip test
+    probe: Stripped of coined terms and restated plainly, what survives as a real claim?
+
+evidence:
+  include: []
+  exclude:
+    - item: the author's own confidence or stated motivation
+      why: endorsement and intent are not evidence the claim is true; judge the claim on its merits
+
+known_gaps:
+  - The reviewers see only this article, not the full framework corpus it sits in.
+
+stance: >
+  Assume the author wants to be proven wrong. Endorsement is not data. Attack the
+  strongest version of the claim. If a pillar genuinely holds, say so plainly
+  rather than manufacturing a weakness.
+
+meta:
+  title: article-claim council
+  review_type: structural-claim

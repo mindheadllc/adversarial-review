@@ -1,0 +1,60 @@
+# One-off thesis packet template.
+# Fill every REQUIRED rail with real content — the precision gate refuses to run
+# on empty / "TBD" / hedged values and will list exactly what's missing.
+# Delete the comments once filled, or keep them; the parser ignores them.
+
+schema_version: 2
+
+# adversarial | steel-man
+mode: adversarial
+
+# REQUIRED (both modes). Declare whether this material is sensitive. There is NO
+# default — leaving it blank is a gap the precision gate refuses on, NOT an implicit
+# "not-sensitive". Set exactly one of:
+#   sensitive      -> forces zero-data-retention (ZDR) routing ON; a --no-zdr override
+#                     is refused. Use for confidential, regulated, or pre-publication
+#                     framework claims — anything you would not want a model vendor to retain.
+#   not-sensitive  -> ZDR follows the run toggle (default off; --zdr to enforce). Use
+#                     for already-public or non-confidential material when you want the
+#                     full frontier panel (incl. non-ZDR labs).
+sensitivity: ""
+
+# REQUIRED. The named, bounded thing under review. A file path OR inline text.
+artifact:
+  path: ""        # e.g. ./docs/some_doc.md
+  # text: |       # ...or paste the artifact inline instead of a path
+  #   ...
+
+# REQUIRED. One sentence: exactly what is being decided or tested.
+question: ""
+
+# REQUIRED. What this review IS and ISN'T about — its scope.
+frame: ""
+
+# REQUIRED. The explicit review dimensions. Pull a starter set from axis-sets/
+# (legal-accuracy, structural-claim, strategy-decision) and adjust. Each axis is
+# a name plus a NEUTRAL probe (a question, not an expected finding).
+axes:
+  - name: ""
+    probe: ""
+
+# Optional but recommended. Evidence scoped both ways.
+evidence:
+  include: []     # list of { path: ... } or { text: ... } the reviewers should see
+  exclude: []     # list of { item: "...", why: "..." } — what must NOT be seen, and why
+
+# Optional. Named uncertainties / what you don't have.
+known_gaps: []
+
+# Optional. Defaults to: assume you want to be proven wrong; endorsement is not data.
+# stance: ""
+
+# Optional. Per-finding format + severity ranking. Has a sensible default.
+# output_shape:
+#   perFinding: ""
+#   severityRanking: [critical, high, medium, low]
+
+# Optional metadata.
+meta:
+  title: ""
+  review_type: ""

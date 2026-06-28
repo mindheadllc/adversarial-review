@@ -1,0 +1,20 @@
+# Contract / governance / legal accuracy axis-set.
+# Probes are NEUTRAL questions — they do not name an expected finding, so the
+# reviewer reads for what is actually there instead of confirming a story.
+name: legal-accuracy
+review_type: legal/contract
+description: >
+  For corporate, legal, or contract artifacts (bylaws, agreements, voting matrices,
+  governance documents) where the cost of an inaccurate citation or an
+  over/under-stated power is high.
+axes:
+  - name: citation accuracy
+    probe: Does every cited section, statute, or clause exist and say what the artifact claims it says?
+  - name: law accuracy
+    probe: Is each statement of the governing law correct for the relevant jurisdiction and current as of the artifact's date?
+  - name: completeness / omissions
+    probe: What material provisions, defenses, exceptions, or counter-arguments that bear on the question are absent?
+  - name: over-/under-statement of a party's power
+    probe: Where does the artifact characterize a party's authority, rights, or obligations more or less strongly than the underlying documents support?
+  - name: named scenarios
+    probe: For each concrete scenario the artifact relies on, does the chain from facts to legal conclusion actually hold?

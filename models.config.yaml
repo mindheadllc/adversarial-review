@@ -1,0 +1,102 @@
+# Model configuration for adversarial-review.
+#
+# The model layer does NOT freeze model slugs. This file names LABS; each run
+# resolves the lab's CURRENT flagship reasoner (and its in-lab fallback chain)
+# from the live OpenRouter catalog by release date. A stale slug can't rot here
+# because there are no slugs — only labs and a selection policy.
+#
+# HARD RULES (enforced in code, independent of this file):
+#   - Reviewer labs are NON-Claude (correlated training data => correlated blind
+#     spots). A Claude reviewer lab is rejected at config load.
+#   - Failover walks DOWN the SAME lab's chain (diversity > frontier), never across.
+#   - A response is validated as a real work product, not just an HTTP 200 — a
+#     refusal or a plaintext "restricted due to..." blob triggers in-lab failover.
+#   - Synthesis holds until ALL lab slots resolve (barrier); no infinite waits
+#     (per-request timeout + advance-on-timeout + per-slot deadline).
+
+schema_version: 2
+
+endpoint: https://openrouter.ai/api/v1/chat/completions
+models_endpoint: https://openrouter.ai/api/v1/models
+
+# ZDR is a PER-RUN SETTING, default OFF. Pass --zdr on a run (or zdr: true in the
+# packet) to restrict to zero-data-retention endpoints for sensitive material.
+# When OFF, the full frontier panel is available. When ON, each lab's chain is
+# effectively filtered to ZDR-capable endpoints by the failover walker (a non-ZDR
+# model returns OpenRouter's "data policy" 404, which advances to the next model).
+zdr:
+  default: false
+  # The load-bearing field is `zdr: true` (zero prompt retention). `data_collection:
+  # deny` is a weaker no-training control kept only as defense-in-depth.
+  provider_preference:
+    zdr: true
+    data_collection: deny
+    require_parameters: true
+
+# Credential: the tool runs LOCALLY on whatever machine invokes it. The OpenRouter
+# key is read at runtime, first hit wins:
+#   1. the `env` var below (default OPENROUTER_API_KEY)
+#   2. the optional `env_file` (a dedicated mode-600 file holding `<env>=...`)
+#   3. the optional macOS `keychain_service`
+#   4. the optional host-local `fallback_files`
+# The key is NEVER stored in this directory. The fallback_files are FILE sources
+# only (path + var), never env vars — so if you keep more than one OpenRouter
+# account on a machine, a generic key exported in your shell can't be picked up by
+# mistake. Most users only need the `env` line (or just export OPENROUTER_API_KEY).
+credential:
+  env: OPENROUTER_API_KEY
+  # env_file: ~/.config/adversarial-review/key.env
+  # keychain_service: openrouter-adversarial-review
+  # fallback_files:
+  #   - path: ~/.config/adversarial-review/fallback.env
+  #     var: OPENROUTER_API_KEY
+
+# Reviewer labs — the diversity panel. Each resolves live to its current smart
+# reasoner chain. NON-Claude only. Order is a hint, not a ranking.
+# Chosen so the panel clears 3+ reviewers in BOTH modes: under ZDR, some labs may
+# drop out (no zero-retention endpoint), and the rest still clear the target.
+reviewer_labs:
+  - openai
+  - google
+  - x-ai
+  - deepseek
+  - z-ai          # GLM
+  - moonshotai    # Kimi
+
+# Per-lab FLAGSHIP REASONER LINE patterns (regex, matched against the slug tail).
+# These scope each lab to its frontier reasoner line so the resolver doesn't pick a
+# lab's small/open/modality model (e.g. Google's gemma; a lab's tool/build model).
+# Line names are stable; only versions rot — so this stays current without rotting.
+lab_patterns:
+  openai: "gpt-[0-9]|^o[0-9]"
+  google: "gemini-[0-9.]+-pro"
+  x-ai: "grok-[0-9]"
+  deepseek: "deepseek-(v[0-9]|r[0-9])"
+  z-ai: "glm-[0-9]"
+  moonshotai: "kimi-k[0-9]"
+  anthropic: "claude-(fable|mythos|opus|sonnet)-?[0-9]"
+
+# Synthesizer lab — Claude. Resolves to the current Claude flagship with in-lab
+# fallback (e.g. a faster flagship -> a heavier one when the faster is unavailable).
+synthesizer_lab: anthropic
+
+# Per-lab reasoning effort. Default applies to any lab without an override.
+reasoning:
+  default: { effort: high }
+  overrides:
+    deepseek: { effort: xhigh }   # xhigh = max reasoning on DeepSeek's reasoner
+
+# Selection policy for buildFamilyChain.
+selection:
+  chain_depth: 3        # flagship + up to 2 in-lab fallbacks
+  # smart_exclude defaults live in code (DEFAULT_SMART_EXCLUDE); override here only if needed.
+  # smart_exclude: [mini, nano, flash, lite, image, chat, codex, ...]
+
+defaults:
+  panel_min: 1                 # hard-fail below this many SUCCESSFUL reviewer labs (zero => no empty review)
+  panel_target: 3              # success-criterion target; logged if fewer labs succeed
+  request_timeout_ms: 900000   # 15 min — generous so slow flagships on max effort over a large packet complete instead of timing out. Lower it for faster fail-on-hang.
+  slot_deadline_ms: 960000     # 16 min — must exceed request_timeout_ms so a request completing near the 15-min mark isn't killed by the slot deadline first
+  retry:
+    attempts: 2                # transient (429/5xx/network) retries only; timeouts/refusals advance immediately
+    backoff_ms: [1000, 4000]

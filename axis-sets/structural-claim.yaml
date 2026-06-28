@@ -1,0 +1,20 @@
+# Structural / intellectual-framework claim axis-set.
+# Probes are NEUTRAL questions — phrased to test the claim, not to confirm it.
+name: structural-claim
+review_type: structural-claim
+description: >
+  For intellectual frameworks, conceptual models, and structural-identity claims
+  (e.g. "X in domain A is the same structure as Y in domain B") where the risk is
+  a claim that sounds profound but is obvious, untransferable, or vacuous once the
+  vocabulary is stripped.
+axes:
+  - name: non-obviousness
+    probe: Once stated plainly, is the claim a genuine insight, or is it something a domain expert would consider already obvious?
+  - name: substrate-transfer reality
+    probe: Does the structure claimed to transfer between substrates actually hold in both, or only by loose analogy?
+  - name: reverse-direction test
+    probe: If the mapping is real, does it also run in reverse — and does running it in reverse produce something true rather than nonsense?
+  - name: prescription in both substrates
+    probe: Does the framework yield a concrete, testable prescription in each substrate it claims to span, or only a description?
+  - name: vocabulary-strip test
+    probe: If you remove the framework's coined terms and restate it in plain language, what survives as a real claim?

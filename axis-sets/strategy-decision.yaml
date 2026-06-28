@@ -1,0 +1,21 @@
+# Strategy / decision axis-set (general).
+# The default starter set for a business or personal strategic decision.
+# Probes are NEUTRAL questions — they surface the structure of the decision
+# rather than pre-judging it.
+name: strategy-decision
+review_type: strategy/decision
+description: >
+  For strategic or operational decisions, plans, and proposals where the risk is a
+  hidden assumption, an unmodeled second-order effect, or a misread of who is
+  actually incentivized to do what.
+axes:
+  - name: assumptions
+    probe: What load-bearing assumptions does the plan rest on, and which of them are unstated or unverified?
+  - name: second-order effects
+    probe: If this works as intended, what does it set in motion next — and are any of those downstream effects worse than the problem being solved?
+  - name: failure modes
+    probe: What are the concrete ways this fails, and for each, what is the early signal that it is failing?
+  - name: stakeholder incentives
+    probe: For each party whose behavior the plan depends on, what do they actually want, and does the plan align with or fight that?
+  - name: what-would-have-to-be-true
+    probe: For the plan to succeed, what would have to be true about the world — and how confident can we be in each of those conditions?

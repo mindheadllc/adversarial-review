@@ -1,0 +1,12 @@
+# Generated review reports (user data — never commit)
+adversarial-reviews/
+
+# Credentials — the OpenRouter key is read from env / a mode-600 file, never committed
+.env
+*.env
+
+# Bun / Node
+node_modules/
+
+# macOS
+.DS_Store
