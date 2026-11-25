@@ -266,7 +266,6 @@ function resolveOutPath(outFlag: string | boolean | undefined, mode: string, sta
 }
 function assertWritable(outPath: string, outFlag: string | boolean | undefined): void {
   const label = typeof outFlag === "string" ? `--out ${outFlag}` : `--out (default ${outPath})`;
-  // Walk up to the nearest existing ancestor: it must be a writable folder.
   let dir = dirname(outPath);
   while (!existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir);
   try {
@@ -491,7 +490,8 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
     process.stderr.write("note: sensitivity=sensitive — ZDR forced ON (sensitive material never routes to data-retaining endpoints).\n");
   }
 
-  const runStamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").replace("Z", "");
+  const timestamp = new Date().toISOString();
+  const runStamp = timestamp.replace(/[:.]/g, "-").replace("T", "_").replace("Z", "");
   const outPath = resolveOutPath(flags.out, packet.mode, runStamp);
   assertWritable(outPath, flags.out);
 
@@ -580,7 +580,6 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
     fail(`synthesis failed: ${String(e?.message ?? e)}. ${ok.length} reviewer critique(s) obtained but not synthesized.`);
   }
 
-  const timestamp = new Date().toISOString();
   const meta: RunMeta = {
     timestamp,
     configuredReviewerSlugs: reviewerSlots.map((s) => s.family),
