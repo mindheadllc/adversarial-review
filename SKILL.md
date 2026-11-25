@@ -68,4 +68,6 @@ gap limit it), then per-pillar verdicts `HOLDS / WEAK / BROKEN / UNTESTED` (a pi
 could probe is UNTESTED, never folded into HOLDS), then a severity-ranked fix list. Steel-man
 mode returns a game-theory playbook instead. Raw per-model critiques are preserved in an
 appendix. The report is a timestamped markdown file (default `./adversarial-reviews/`,
-override with `--out`); the run prints its path.
+override with `--out`, a file or a folder); the run prints its path. The output location is
+checked before any model call, and a failed write falls back to your home folder so a paid run
+is never lost. Relative paths inside a packet file resolve from the packet's own folder.

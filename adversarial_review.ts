@@ -20,8 +20,8 @@
  *            [--zdr|--no-zdr] [--out <path>] [--dry-run] [--config <path>]
  */
 
-import { join, resolve, isAbsolute } from "path";
-import { mkdirSync, readFileSync, existsSync } from "fs";
+import { join, resolve, isAbsolute, dirname } from "path";
+import { mkdirSync, readFileSync, existsSync, statSync, accessSync, constants as fsConstants } from "fs";
 import { homedir } from "os";
 import {
   normalizePacket,
@@ -204,24 +204,37 @@ function resolveRunZdr(
 }
 
 // ---- source resolution ---------------------------------------------------------
-async function readSource(ref: { path?: string; text?: string }, field: string): Promise<string> {
+// Relative paths inside a packet FILE resolve against that file's folder first (so a
+// packet works from any cwd), then the cwd (back-compat). Stdin and template packets
+// have no packet folder, so they resolve against the cwd as before.
+function packetBaseDir(flags: Record<string, string | boolean>): string | undefined {
+  if (typeof flags.template === "string") return undefined;
+  if (typeof flags.packet !== "string" || flags.packet === "-") return undefined;
+  return dirname(resolveUserPath(flags.packet));
+}
+function candidateSourcePaths(p: string, baseDir: string | undefined): string[] {
+  const e = expandHome(p);
+  if (isAbsolute(e) || !baseDir) return [resolveUserPath(e)];
+  return [resolve(baseDir, e), resolveUserPath(e)];
+}
+async function readSource(ref: { path?: string; text?: string }, field: string, baseDir?: string): Promise<string> {
   if (!isVacuous(ref.text)) return (ref.text as string).trim();
   if (!isVacuous(ref.path)) {
-    const p = resolveUserPath(ref.path as string);
-    const f = Bun.file(p);
-    if (!(await f.exists())) fail(`malformed packet: ${field} references a missing file: ${ref.path}`);
-    return (await f.text()).trim();
+    const tried = candidateSourcePaths(ref.path as string, baseDir);
+    const p = tried.find((c) => existsSync(c));
+    if (!p) fail(`malformed packet: ${field} references a missing file: ${ref.path} (looked in ${tried.join(" and ")})`);
+    return (await Bun.file(p).text()).trim();
   }
   return "";
 }
-async function resolveSources(packet: ThesisPacket): Promise<ResolvedSources> {
-  const artifactText = await readSource(packet.artifact, "artifact");
+async function resolveSources(packet: ThesisPacket, baseDir?: string): Promise<ResolvedSources> {
+  const artifactText = await readSource(packet.artifact, "artifact", baseDir);
   let evidenceText = "";
   if (packet.evidence?.include?.length) {
     const parts: string[] = [];
     for (let i = 0; i < packet.evidence.include.length; i++) {
       const ref = packet.evidence.include[i];
-      const body = await readSource(ref, `evidence.include[${i}]`);
+      const body = await readSource(ref, `evidence.include[${i}]`, baseDir);
       if (body) parts.push(`## Evidence: ${ref.label ?? ref.path ?? `item ${i + 1}`}\n${body}`);
     }
     evidenceText = parts.join("\n\n");
@@ -231,12 +244,62 @@ async function resolveSources(packet: ThesisPacket): Promise<ResolvedSources> {
     const parts: string[] = [];
     for (let i = 0; i < packet.opponent.information.length; i++) {
       const ref = packet.opponent.information[i];
-      const body = await readSource(ref, `opponent.information[${i}]`);
+      const body = await readSource(ref, `opponent.information[${i}]`, baseDir);
       if (body) parts.push(`## What the opponent knows: ${ref.label ?? ref.path ?? `item ${i + 1}`}\n${body}`);
     }
     opponentInfoText = parts.join("\n\n");
   }
   return { artifactText, evidenceText, opponentInfoText };
+}
+
+// ---- report output -------------------------------------------------------------
+// The report path is resolved and checked BEFORE any model call, so a bad --out can't
+// throw away a paid run. A --out naming an existing folder (or ending in "/") gets the
+// default timestamped filename inside it.
+function resolveOutPath(outFlag: string | boolean | undefined, mode: string, stamp: string): string {
+  const fileName = `${stamp}-${mode}.md`;
+  if (typeof outFlag !== "string") return resolveUserPath(join("adversarial-reviews", fileName));
+  const p = resolveUserPath(outFlag);
+  const isDir = outFlag.endsWith("/") || (existsSync(p) && statSync(p).isDirectory());
+  return isDir ? join(p, fileName) : p;
+}
+function assertWritable(outPath: string, outFlag: string | boolean | undefined): void {
+  const label = typeof outFlag === "string" ? `--out ${outFlag}` : `--out (default ${outPath})`;
+  if (existsSync(outPath)) {
+    try {
+      accessSync(outPath, fsConstants.W_OK);
+    } catch (e) {
+      fail(`${label}: can't write a report there (${(e as Error).message}).`);
+    }
+    return;
+  }
+  let dir = dirname(outPath);
+  while (!existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir);
+  try {
+    if (!statSync(dir).isDirectory()) fail(`${label}: can't write a report there (${dir} is a file, not a folder).`);
+    accessSync(dir, fsConstants.W_OK | fsConstants.X_OK);
+  } catch (e) {
+    fail(`${label}: can't write a report there (${(e as Error).message}).`);
+  }
+}
+// Never lose a paid run: if the chosen path fails at write time, fall back to the home
+// folder; if that fails too, return null so the caller puts the report in its JSON result.
+async function writeReport(outPath: string, markdown: string): Promise<string | null> {
+  try {
+    mkdirSync(dirname(outPath), { recursive: true });
+    await Bun.write(outPath, markdown);
+    return outPath;
+  } catch (e) {
+    const fallback = join(homedir(), `adversarial-review-${Date.now()}.md`);
+    process.stderr.write(`warning: couldn't write ${outPath} (${(e as Error).message}); saving to ${fallback}\n`);
+    try {
+      await Bun.write(fallback, markdown);
+      return fallback;
+    } catch {
+      process.stderr.write("warning: fallback write failed too; the report is in the JSON result's report_markdown field.\n");
+      return null;
+    }
+  }
 }
 
 // ---- credential ----------------------------------------------------------------
@@ -433,7 +496,12 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
     process.stderr.write("note: sensitivity=sensitive — ZDR forced ON (sensitive material never routes to data-retaining endpoints).\n");
   }
 
-  const resolved = await resolveSources(packet);
+  const timestamp = new Date().toISOString();
+  const runStamp = timestamp.replace(/[:.]/g, "-").replace("T", "_").replace("Z", "");
+  const outPath = resolveOutPath(flags.out, packet.mode, runStamp);
+  assertWritable(outPath, flags.out);
+
+  const resolved = await resolveSources(packet, packetBaseDir(flags));
   const scaffold = await loadScaffold(packet.mode);
   const reviewerPrompt = fillScaffold(scaffold, packet, resolved);
   const leftover = leftoverPlaceholders(reviewerPrompt);
@@ -464,6 +532,7 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
       synthesizer: synthChain[0].slug,
       target_reviewers: cfg.defaults.panel_target,
       reviewer_prompt_preview: reviewerPrompt.slice(0, 1200),
+      report_path: outPath,
     });
     return;
   }
@@ -517,7 +586,6 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
     fail(`synthesis failed: ${String(e?.message ?? e)}. ${ok.length} reviewer critique(s) obtained but not synthesized.`);
   }
 
-  const timestamp = new Date().toISOString();
   const meta: RunMeta = {
     timestamp,
     configuredReviewerSlugs: reviewerSlots.map((s) => s.family),
@@ -526,13 +594,7 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
   };
   const markdown = buildReportMarkdown(packet, results, synthesisText, meta);
 
-  const stamp = timestamp.replace(/[:.]/g, "-").replace("T", "_").replace("Z", "");
-  const outPath =
-    typeof flags.out === "string"
-      ? resolveUserPath(flags.out)
-      : resolveUserPath(join("adversarial-reviews", `${stamp}-${packet.mode}.md`));
-  mkdirSync(join(outPath, ".."), { recursive: true });
-  await Bun.write(outPath, markdown);
+  const reportPath = await writeReport(outPath, markdown);
 
   out({
     status: "success",
@@ -540,7 +602,8 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
     sensitivity: packet.sensitivity,
     zdr,
     zdr_forced: zdrForced,
-    report_path: outPath,
+    report_path: reportPath,
+    ...(reportPath === null ? { report_markdown: markdown } : {}),
     reviewers_succeeded: ok.length,
     reviewers_total: results.length,
     panel: ok.map((r) => ({ lab: r.family, model: r.slug, failover: (r.fallbacksUsed ?? 0) > 0 })),
