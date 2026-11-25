@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { join } from "path";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "fs";
 import { tmpdir } from "os";
 
 const SKILL_DIR = join(import.meta.dir, "..");
@@ -258,5 +258,26 @@ describe("self-containment", () => {
     const r = await runCli(["run", "--packet", "-", "--dry-run", "--catalog", CATALOG, "--out", join(blocker, "report.md")], { stdin: COMPLETE });
     expect(r.code).not.toBe(0);
     expect(r.stderr).toContain("--out");
+  });
+
+  test("a read-only existing --out file fails fast, before any model call (non-zero)", async () => {
+    const ro = join(TMP, "read-only-report.md");
+    writeFileSync(ro, "old report");
+    chmodSync(ro, 0o444);
+    const r = await runCli(["run", "--packet", "-", "--dry-run", "--catalog", CATALOG, "--out", ro], { stdin: COMPLETE });
+    chmodSync(ro, 0o644);
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toContain("--out");
+  });
+
+  test("a missing relative artifact names both places it looked (packet folder and cwd)", async () => {
+    const pktDir = mkdtempSync(join(tmpdir(), "advrev-pkt-"));
+    const pkt = { ...JSON.parse(COMPLETE), artifact: { path: "./nowhere.md" } };
+    writeFileSync(join(pktDir, "packet.json"), JSON.stringify(pkt));
+    const r = await runCli(["run", "--packet", join(pktDir, "packet.json"), "--dry-run", "--catalog", CATALOG]);
+    rmSync(pktDir, { recursive: true, force: true });
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toContain(join(pktDir, "nowhere.md"));
+    expect(r.stderr).toContain(join(SKILL_DIR, "nowhere.md"));
   });
 });

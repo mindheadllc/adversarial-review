@@ -212,19 +212,18 @@ function packetBaseDir(flags: Record<string, string | boolean>): string | undefi
   if (typeof flags.packet !== "string" || flags.packet === "-") return undefined;
   return dirname(resolveUserPath(flags.packet));
 }
-function resolveSourcePath(p: string, baseDir: string | undefined): string {
+function candidateSourcePaths(p: string, baseDir: string | undefined): string[] {
   const e = expandHome(p);
-  if (isAbsolute(e) || !baseDir) return resolveUserPath(e);
-  const fromPacket = resolve(baseDir, e);
-  return existsSync(fromPacket) ? fromPacket : resolveUserPath(e);
+  if (isAbsolute(e) || !baseDir) return [resolveUserPath(e)];
+  return [resolve(baseDir, e), resolveUserPath(e)];
 }
 async function readSource(ref: { path?: string; text?: string }, field: string, baseDir?: string): Promise<string> {
   if (!isVacuous(ref.text)) return (ref.text as string).trim();
   if (!isVacuous(ref.path)) {
-    const p = resolveSourcePath(ref.path as string, baseDir);
-    const f = Bun.file(p);
-    if (!(await f.exists())) fail(`malformed packet: ${field} references a missing file: ${ref.path}`);
-    return (await f.text()).trim();
+    const tried = candidateSourcePaths(ref.path as string, baseDir);
+    const p = tried.find((c) => existsSync(c));
+    if (!p) fail(`malformed packet: ${field} references a missing file: ${ref.path} (looked in ${tried.join(" and ")})`);
+    return (await Bun.file(p).text()).trim();
   }
   return "";
 }
@@ -266,18 +265,26 @@ function resolveOutPath(outFlag: string | boolean | undefined, mode: string, sta
 }
 function assertWritable(outPath: string, outFlag: string | boolean | undefined): void {
   const label = typeof outFlag === "string" ? `--out ${outFlag}` : `--out (default ${outPath})`;
+  if (existsSync(outPath)) {
+    try {
+      accessSync(outPath, fsConstants.W_OK);
+    } catch (e) {
+      fail(`${label}: can't write a report there (${(e as Error).message}).`);
+    }
+    return;
+  }
   let dir = dirname(outPath);
   while (!existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir);
   try {
     if (!statSync(dir).isDirectory()) fail(`${label}: can't write a report there (${dir} is a file, not a folder).`);
-    accessSync(dir, fsConstants.W_OK);
+    accessSync(dir, fsConstants.W_OK | fsConstants.X_OK);
   } catch (e) {
     fail(`${label}: can't write a report there (${(e as Error).message}).`);
   }
 }
 // Never lose a paid run: if the chosen path fails at write time, fall back to the home
-// folder, then to stdout.
-async function writeReport(outPath: string, markdown: string): Promise<string> {
+// folder; if that fails too, return null so the caller puts the report in its JSON result.
+async function writeReport(outPath: string, markdown: string): Promise<string | null> {
   try {
     mkdirSync(dirname(outPath), { recursive: true });
     await Bun.write(outPath, markdown);
@@ -289,9 +296,8 @@ async function writeReport(outPath: string, markdown: string): Promise<string> {
       await Bun.write(fallback, markdown);
       return fallback;
     } catch {
-      process.stderr.write("warning: fallback write failed too; printing the report to stdout.\n");
-      process.stdout.write(markdown + "\n");
-      return "<stdout>";
+      process.stderr.write("warning: fallback write failed too; the report is in the JSON result's report_markdown field.\n");
+      return null;
     }
   }
 }
@@ -597,6 +603,7 @@ async function cmdRun(flags: Record<string, string | boolean>): Promise<void> {
     zdr,
     zdr_forced: zdrForced,
     report_path: reportPath,
+    ...(reportPath === null ? { report_markdown: markdown } : {}),
     reviewers_succeeded: ok.length,
     reviewers_total: results.length,
     panel: ok.map((r) => ({ lab: r.family, model: r.slug, failover: (r.fallbacksUsed ?? 0) > 0 })),
