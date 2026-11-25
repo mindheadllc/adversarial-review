@@ -229,4 +229,34 @@ describe("self-containment", () => {
     expect(r.code).toBe(0);
     expect(JSON.parse(r.stdout).status).toBe("dry_run");
   });
+
+  test("resolves a packet's relative artifact path against the packet file's folder, not the cwd", async () => {
+    const pktDir = mkdtempSync(join(tmpdir(), "advrev-pkt-"));
+    writeFileSync(join(pktDir, "rel-artifact.md"), "# Relative artifact\nA claim to test.\n");
+    const pkt = { ...JSON.parse(COMPLETE), artifact: { path: "./rel-artifact.md" } };
+    writeFileSync(join(pktDir, "packet.json"), JSON.stringify(pkt));
+    // cwd is the skill dir, where ./rel-artifact.md does not exist.
+    const r = await runCli(["run", "--packet", join(pktDir, "packet.json"), "--dry-run", "--catalog", CATALOG]);
+    rmSync(pktDir, { recursive: true, force: true });
+    expect(r.stderr).not.toContain("missing file");
+    expect(r.code).toBe(0);
+  });
+
+  test("--out naming an existing folder puts the timestamped report inside it (resolved before any model call)", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "advrev-out-"));
+    const r = await runCli(["run", "--packet", "-", "--dry-run", "--catalog", CATALOG, "--out", outDir], { stdin: COMPLETE });
+    rmSync(outDir, { recursive: true, force: true });
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.stdout);
+    expect(j.report_path.startsWith(outDir + "/")).toBe(true);
+    expect(j.report_path.endsWith(".md")).toBe(true);
+  });
+
+  test("an unwritable --out fails fast, before any model call (non-zero)", async () => {
+    const blocker = join(TMP, "a-regular-file");
+    writeFileSync(blocker, "not a folder");
+    const r = await runCli(["run", "--packet", "-", "--dry-run", "--catalog", CATALOG, "--out", join(blocker, "report.md")], { stdin: COMPLETE });
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toContain("--out");
+  });
 });

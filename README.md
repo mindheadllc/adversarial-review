@@ -176,7 +176,8 @@ bun adversarial_review.ts describe --packet my-packet.yaml
 
 ```bash
 bun adversarial_review.ts run --packet my-packet.yaml
-# writes a timestamped report to ./adversarial-reviews/ and prints its path
+# writes a timestamped report to ./adversarial-reviews/ (or --out <file|folder>) and prints its path;
+# a bad --out fails before any model call
 ```
 
 Add `--dry-run` to assemble the whole review and resolve the live model panel with **no
@@ -193,7 +194,7 @@ enforced by the precision gate in **both** modes.
 |---|---|---|
 | `mode` | ✅ | `adversarial` (general pressure) or `steel-man` (model a named opponent). |
 | `sensitivity` | ✅ | `sensitive` or `not-sensitive`, declared explicitly (see below). Absent is a gap, **not** "false". |
-| `artifact` | ✅ | The bounded thing under review: `{ path: ... }` or `{ text: ... }`. |
+| `artifact` | ✅ | The bounded thing under review: `{ path: ... }` or `{ text: ... }`. A relative `path` resolves from the packet file's folder (then the current directory). |
 | `question` | ✅ | One sentence: exactly what is being decided or tested. |
 | `frame` | ✅ | The scope — what the review is and isn't about. |
 | `axes` | ✅ | A list of `{ name, probe }`. The `probe` is a NEUTRAL question, never a planted conclusion. |
